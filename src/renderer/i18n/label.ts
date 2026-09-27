@@ -59,8 +59,10 @@ const providerKeyMap = {
   nvidia: 'provider.nvidia',
   o3: 'provider.o3',
   ocoolai: 'provider.ocoolai',
-  ovms: 'provider.ovms',
   ollama: 'provider.ollama',
+  omlx: 'provider.omlx',
+  omniroute: 'provider.omniroute',
+  ovms: 'provider.ovms',
   openai: 'provider.openai',
   'openai-codex': 'provider.openai-codex',
   openrouter: 'provider.openrouter',
@@ -91,6 +93,7 @@ const providerKeyMap = {
   cerebras: 'provider.cerebras',
   mimo: 'provider.mimo',
   'minimax-global': 'provider.minimax-global',
+  'moonshot-global': 'provider.moonshot-global',
   zai: 'provider.zai',
   'local-embedding': 'provider.local-embedding',
   opencode: 'provider.opencode'
@@ -197,6 +200,8 @@ const sidebarIconKeyMap = {
   assistants: 'title.chat',
   agents: 'title.work',
   paintings: 'title.paintings',
+  videos: 'title.videos',
+  tutor: 'tutor.title',
   translate: 'translate.title',
   mini_app: 'miniApp.title',
   knowledge: 'knowledge.title',
@@ -336,6 +341,7 @@ const builtInMcpDescriptionKeyMap: Record<BuiltinMcpServerName, string> = {
   [BuiltinMcpServerNames.python]: 'settings.mcp.builtinServersDescriptions.python',
   [BuiltinMcpServerNames.didiMcp]: 'settings.mcp.builtinServersDescriptions.didi_mcp',
   [BuiltinMcpServerNames.browser]: 'settings.mcp.builtinServersDescriptions.browser',
+  [BuiltinMcpServerNames.pollinations]: 'settings.mcp.builtinServersDescriptions.pollinations',
   [BuiltinMcpServerNames.nowledgeMem]: 'settings.mcp.builtinServersDescriptions.nowledge_mem',
   [BuiltinMcpServerNames.hub]: 'settings.mcp.builtinServersDescriptions.hub'
 } as const

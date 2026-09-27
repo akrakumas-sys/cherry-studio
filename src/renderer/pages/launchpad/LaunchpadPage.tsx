@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Sortable } from '@cherrystudio/ui'
+import { useSharedCacheValue } from '@data/hooks/useCache'
 import { usePreference } from '@data/hooks/usePreference'
 import agentsIcon from '@renderer/assets/images/apps/launchpad-agents.svg'
 import assistantsIcon from '@renderer/assets/images/apps/launchpad-assistants.svg'
@@ -25,12 +26,7 @@ import { useSidebarShortcuts } from '@renderer/hooks/useSidebarShortcuts'
 import { getSidebarIconLabelKey } from '@renderer/i18n/label'
 import { toast } from '@renderer/services/toast'
 import type { SidebarAppId } from '@renderer/utils/sidebar'
-import {
-  canRemoveSidebarShortcut,
-  createSidebarShortcutTarget,
-  getSidebarMenuPath,
-  SIDEBAR_SHORTCUT_PROVIDER_IDS
-} from '@renderer/utils/sidebar'
+import { createSidebarShortcutTarget, getSidebarMenuPath, SIDEBAR_SHORTCUT_PROVIDER_IDS } from '@renderer/utils/sidebar'
 import type { MiniApp as MiniAppType } from '@shared/data/types/miniApp'
 
 const BASE_URL = 'https://www.cherry-ai.com/'
@@ -40,6 +36,8 @@ const LAUNCHPAD_GRID_CLASS = 'grid grid-cols-6 justify-items-center gap-2 px-2'
 const LAUNCHPAD_ITEM_CLASS = 'mx-auto w-[92px]'
 const APP_ICON_TILE_CLASS =
   'flex size-14 items-center justify-center rounded-2xl border border-border-subtle bg-transparent'
+const APP_ICON_SURFACE_CLASS =
+  'relative flex size-14 items-center justify-center overflow-hidden rounded-2xl border border-border-subtle bg-card'
 const APP_ICON_FRAME_CLASS =
   'relative flex size-[50px] shrink-0 items-center justify-center overflow-hidden rounded-xl select-none'
 const APP_ICON_CLASS = 'size-[50px] object-contain'
@@ -49,6 +47,8 @@ const APP_ICON_SOURCES: Record<SidebarAppId, string> = {
   assistants: assistantsIcon,
   agents: agentsIcon,
   paintings: paintingsIcon,
+  videos: paintingsIcon,
+  tutor: knowledgeIcon,
   translate: translateIcon,
   mini_app: miniAppIcon,
   knowledge: knowledgeIcon,
@@ -75,6 +75,16 @@ export default function LaunchpadPage() {
   const { orderedAppIds, reorderApps } = useLaunchpadAppOrder()
   const suppressClickUntilRef = useRef(0)
   const draggedItemIdRef = useRef<string | null>(null)
+
+  const routingTable = useSharedCacheValue('routing.derived_table')
+  const activeModelCount = useMemo(() => {
+    if (!routingTable) return 0
+    const ids = new Set<string>()
+    for (const candidates of Object.values(routingTable)) {
+      for (const c of candidates) ids.add(c.id)
+    }
+    return ids.size
+  }, [routingTable])
 
   const miniAppFavoriteIdSet = useMemo(
     () =>
@@ -186,12 +196,11 @@ export default function LaunchpadPage() {
           id: `launchpad.${pinned ? 'unpin-from-sidebar' : 'pin-to-sidebar'}.${favorite}`,
           label: t(pinned ? 'launchpad.unpin_from_sidebar' : 'launchpad.pin_to_sidebar'),
           icon: <SidebarShortcutIcon size={14} pinned={pinned} />,
-          enabled: !pinned || canRemoveSidebarShortcut(shortcuts, target),
           onSelect: () => (pinned ? unpinFromSidebar(favorite) : pinToSidebar(favorite))
         }
       ]
     },
-    [isPinned, pinToSidebar, shortcuts, t, unpinFromSidebar]
+    [isPinned, pinToSidebar, t, unpinFromSidebar]
   )
 
   // Sidebar-backed app tiles keep their existing launchpad order. The direct
@@ -261,7 +270,7 @@ export default function LaunchpadPage() {
         onClick={() => openLaunchpadItem(item.id)}
         className={`${LAUNCHPAD_ITEM_CLASS} group flex cursor-pointer flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center outline-none transition-transform duration-200 hover:scale-105 focus-visible:scale-105 active:scale-95`}>
         <span className="relative flex size-14 items-center justify-center">
-          <span className={APP_ICON_TILE_CLASS}>
+          <span className={APP_ICON_SURFACE_CLASS}>
             <span className={APP_ICON_FRAME_CLASS}>
               <img src={item.iconSrc} alt="" className={APP_ICON_CLASS} draggable={false} />
             </span>
@@ -299,6 +308,17 @@ export default function LaunchpadPage() {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <Scrollbar className="min-h-0 flex-1">
         <div className="mx-auto flex w-full max-w-180 flex-col gap-5 py-12.5">
+          <div className="flex items-center gap-2 px-9">
+            <span
+              className={`size-2 shrink-0 rounded-full ${activeModelCount > 0 ? 'bg-green-500' : 'bg-yellow-500'}`}
+            />
+            <span className="text-[12px] text-foreground/60">
+              {activeModelCount > 0
+                ? t('launchpad.models_ready', { count: activeModelCount })
+                : t('launchpad.no_models_hint')}
+            </span>
+          </div>
+
           <section className="flex flex-col gap-2">
             <h2 className="m-0 px-9 py-0 font-semibold text-[14px] text-foreground opacity-80">
               {t('launchpad.apps')}

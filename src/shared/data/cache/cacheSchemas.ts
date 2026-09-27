@@ -4,6 +4,7 @@ import type { LocalModelStatusSnapshots } from '@shared/data/presets/localModel'
 import type { ChannelStatus } from '@shared/data/types/channel'
 import type { MiniAppRegion, TransientMiniApp } from '@shared/data/types/miniApp'
 import type { Currency } from '@shared/data/types/model'
+import { type DerivedRoutingTable, EMPTY_DERIVED_ROUTING_TABLE } from '@shared/data/types/routing'
 import type { AutoBackupEvent, AutoBackupType } from '@shared/types/backup'
 import type { AbsoluteFilePath } from '@shared/types/file'
 import type { ManagedToolStatusState } from '@shared/types/managedTool'
@@ -129,11 +130,19 @@ export type UseCacheSchema = {
   'chat.multi_select_mode': boolean
   'chat.selected_message_ids': string[]
   'chat.web_search.searching': boolean
-  // Per-topic composer draft. Renderer memory only; app restart discards it.
+  // Per-topic composer draft, renderer memory only; see chat.composer_draft_snapshot (persist
+  // tier, below) for the crash/restart-recovery fallback consulted when this is empty.
   'chat.composer_draft.${topicId}': CacheValueTypes.CacheChatComposerDraft
   // Message-list scroll position memory, keyed per topic / agent session.
   // `null` = follow the latest message (at bottom or never scrolled).
   'chat.scroll_anchor.${topicId}': CacheValueTypes.ChatScrollAnchor | null
+  // Detached Chat/Agent windows keep pane state within their renderer process. These values are
+  // seeded from the matching persisted preference but never sync back to the main window.
+  'ui.window.chat.sidebar.width': number
+  'ui.window.chat.artifact_pane.width': number
+  'ui.window.chat.resource_pane.width': number
+  'ui.window.chat.right_pane_open_override': boolean | null
+  'ui.window.agent.right_pane_open_override': boolean | null
 
   // Knowledge recall test query history (session-only)
   'knowledge.recall.search_queries': Record<string, string[]>
@@ -160,6 +169,8 @@ export type UseCacheSchema = {
   'agent.session.waiting_id_map': Record<string, boolean>
   // Per-session composer draft. Renderer memory only; app restart discards it.
   'agent.composer_draft.${sessionId}': CacheValueTypes.CacheAgentComposerDraft
+  // Unsubmitted AskUserQuestion answers. Renderer memory only; cleared on submit/dismiss.
+  'agent.ask_user_question_draft.${approvalId}': CacheValueTypes.CacheAskUserQuestionDraft
 
   // Translate page state management
   /** Input text */
@@ -228,6 +239,11 @@ export const DefaultUseCache: UseCacheSchema = {
     modelMultiSelectMode: false
   },
   'chat.scroll_anchor.${topicId}': null,
+  'ui.window.chat.sidebar.width': 275,
+  'ui.window.chat.artifact_pane.width': 460,
+  'ui.window.chat.resource_pane.width': 275,
+  'ui.window.chat.right_pane_open_override': null,
+  'ui.window.agent.right_pane_open_override': null,
   'knowledge.recall.search_queries': {},
   'notes.active_file_path': undefined,
 
@@ -253,6 +269,11 @@ export const DefaultUseCache: UseCacheSchema = {
     knowledgeBaseIds: [],
     workspaceKey: '',
     agentId: ''
+  },
+  'agent.ask_user_question_draft.${approvalId}': {
+    selectedAnswers: {},
+    customAnswers: {},
+    currentIndex: 0
   },
 
   // Translate page state management
@@ -287,6 +308,8 @@ export type SharedCacheSchema = {
   'chat.web_search.active_searches': CacheValueTypes.CacheActiveSearches
   'mcp.tools.${serverId}': CacheValueTypes.CacheMcpTool[]
   'mcp.status.${serverId}': CacheValueTypes.McpRuntimeStatus
+  'doctor.state.${scope}': CacheValueTypes.CacheDoctorState
+  'network.online': boolean
   // Runtime-only opt-out shared across windows; resets when the app exits.
   'agent.model_switch_confirmation.skipped': boolean
   'agent.session.compaction.${sessionId}': CacheValueTypes.CacheAgentSessionCompactionState
@@ -304,6 +327,10 @@ export type SharedCacheSchema = {
   'feature.hermes_dashboard.status': ManagedToolStatusState
   // API gateway  runtime running state.
   'feature.api_gateway.running': boolean
+  // Main-owned model ranking per task category. Derived from providers, health and quota, so it is
+  // rebuilt on demand rather than persisted; the renderer reads it to explain routing decisions.
+  'routing.derived_table': DerivedRoutingTable
+  'feature.remote_access.discovery_status': 'inactive' | 'starting' | 'available' | 'unavailable'
   'feature.api_gateway.lan_running': boolean
   // Main-owned, session-only local model status and download progress.
   'local_model.statuses': LocalModelStatusSnapshots
@@ -349,6 +376,8 @@ export const DefaultSharedCache: SharedCacheSchema = {
   'chat.web_search.active_searches': {},
   'mcp.tools.${serverId}': [],
   'mcp.status.${serverId}': { state: 'disabled', lastCheckedAt: 0 },
+  'doctor.state.${scope}': { status: 'idle' },
+  'network.online': true,
   'agent.model_switch_confirmation.skipped': false,
   'agent.session.compaction.${sessionId}': null,
   'agent.session.api_retry.${sessionId}': null,
@@ -364,6 +393,8 @@ export const DefaultSharedCache: SharedCacheSchema = {
   'feature.deepseek_harness.status': { status: 'stopped' },
   'feature.hermes_dashboard.status': { status: 'stopped' },
   'feature.api_gateway.running': false,
+  'routing.derived_table': EMPTY_DERIVED_ROUTING_TABLE,
+  'feature.remote_access.discovery_status': 'inactive',
   'feature.api_gateway.lan_running': false,
   'local_model.statuses': {},
   'feature.binary.latest_versions': {},
@@ -405,6 +436,10 @@ export type RendererPersistCacheSchema = {
   'ui.composer.input_history': string[]
   'ui.chat.last_used_assistant_id': string | null
   'ui.chat.last_used_topic_id': string | null
+  // Crash/restart-recovery mirror of chat.composer_draft.*, keyed by topic id. An entry is
+  // removed once a topic's draft empties, and `savedAt` carries the memory tier's TTL across
+  // a restart so a stale draft is neither resurrected nor kept forever.
+  'chat.composer_draft_snapshot': Record<string, { draft: CacheValueTypes.CacheChatComposerDraft; savedAt: number }>
   // Per-surface classic-layout right-pane override. Null delegates to the page's position-derived
   // default; booleans preserve an explicit user choice across page re-entry.
   'ui.chat.right_pane_open_override': boolean | null
@@ -425,7 +460,7 @@ export type RendererPersistCacheSchema = {
   'ui.agent.session.expansion.agent': string[] | null
   'ui.agent.session.expansion.workdir': string[] | null
   'settings.provider.last_selected_provider_id': string | null
-  'settings.provider.filter_mode': 'all' | 'agent' | 'enabled' | 'disabled'
+  'settings.provider.filter_mode': 'all' | 'agent' | 'enabled' | 'disabled' | 'free'
   // Usage statistics view selections, persisted so leaving and re-entering the page restores
   // them. The heatmap drill-down date stays component-local: a stored past date would reopen
   // the page on an empty range.
@@ -468,6 +503,7 @@ export const DefaultRendererPersistCache: RendererPersistCacheSchema = {
   'ui.composer.input_history': [],
   'ui.chat.last_used_assistant_id': null,
   'ui.chat.last_used_topic_id': null,
+  'chat.composer_draft_snapshot': {},
   'ui.chat.right_pane_open_override': null,
   'ui.assistant.entity_rail.expansion': [],
   'ui.topic.expansion.time': [],

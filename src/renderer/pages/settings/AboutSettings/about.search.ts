@@ -13,10 +13,10 @@ export const entries: SettingsSearchEntry[] = [
     aliases: ['update', '更新']
   },
   {
-    anchorId: 'diagnostics',
-    titleKey: 'settings.about.diagnostics.entry.title',
+    anchorId: 'health',
+    titleKey: 'settings.about.health.title',
     groupKey: 'settings.about.label',
-    aliases: ['diagnostics', '诊断']
+    aliases: ['health', 'status', 'sağlık', 'durum']
   },
   {
     anchorId: 'debug-tools',

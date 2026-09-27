@@ -6,15 +6,19 @@ import { AgentJobsService } from '@main/ai/agents/AgentJobsService'
 import { AgentLifecycleService } from '@main/ai/agents/AgentLifecycleService'
 import { AgentSessionDeliveryService } from '@main/ai/agentSession/AgentSessionDeliveryService'
 import { AgentSessionRuntimeService } from '@main/ai/agentSession/AgentSessionRuntimeService'
+import { CheckpointService } from '@main/ai/agentSession/CheckpointService'
 import { AiService } from '@main/ai/AiService'
 import { ChannelManager } from '@main/ai/channels'
 import { EmbeddingInferenceService } from '@main/ai/localModel'
+import { ErrorSummarizerService } from '@main/ai/localModel'
 import { LocalModelService } from '@main/ai/localModel'
 import { OcrInferenceService } from '@main/ai/localModel'
 import { McpCatalogService } from '@main/ai/mcp/McpCatalogService'
 import { McpPackageService } from '@main/ai/mcp/McpPackageService'
 import { McpRuntimeService } from '@main/ai/mcp/McpRuntimeService'
 import { ClaudeCodeTraceBridgeService, NodeTraceService, TraceStorageService } from '@main/ai/observability'
+import { ModelRoutingService } from '@main/ai/routing/ModelRoutingService'
+import { ProviderKeyScanService } from '@main/ai/routing/ProviderKeyScanService'
 import {
   ClaudeCodeProcessManager,
   ClaudeCodeSessionStateService,
@@ -45,6 +49,7 @@ import { CodeCliService } from '@main/services/codeCli'
 import { CommandService } from '@main/services/CommandService'
 import { ConversationNavigationService } from '@main/services/ConversationNavigationService'
 import { DeepSeekHarnessService } from '@main/services/deepSeekHarness'
+import { DoctorService } from '@main/services/diagnostics'
 import { DirectoryTreeManager, FileManager } from '@main/services/file'
 import { HermesDashboardService } from '@main/services/HermesDashboardService'
 import { LanTransferService } from '@main/services/lanTransfer'
@@ -52,6 +57,7 @@ import { LogRetentionService } from '@main/services/LogRetentionService'
 import { MainNetworkDevtoolsService } from '@main/services/mainNetworkDevtools'
 import { MainWindowService } from '@main/services/MainWindowService'
 import { MediaProtocolService } from '@main/services/mediaProtocol'
+import { NetworkService } from '@main/services/network'
 import { NotificationService } from '@main/services/NotificationService'
 import { OAuthRuntimeService } from '@main/services/oauth/runtime/OAuthRuntimeService'
 import { OpenClawService } from '@main/services/OpenClawService'
@@ -62,6 +68,7 @@ import { ProviderRegistryUpdaterService } from '@main/services/ProviderRegistryU
 import { ProxyService } from '@main/services/proxy/ProxyService'
 import { PythonService } from '@main/services/PythonService'
 import { QuickAssistantService } from '@main/services/QuickAssistantService'
+import { RemoteAccessService } from '@main/services/remoteAccess'
 import { ScreenshotOverlayService } from '@main/services/screenshot'
 import { SelectionService } from '@main/services/selection/SelectionService'
 import { SentryLogService } from '@main/services/SentryLogService'
@@ -98,6 +105,7 @@ import { WebviewService } from '@main/services/webview'
  * Value = service class constructor
  */
 export const services = {
+  RemoteAccessService,
   MainNetworkDevtoolsService,
   WindowManager,
   UtilityProcessManager,
@@ -135,7 +143,9 @@ export const services = {
   MediaProtocolService,
   ScreenshotOverlayService,
   ProxyService,
+  NetworkService,
   StorageMonitorService,
+  DoctorService,
   LogRetentionService,
   PythonService,
   TrayService,
@@ -155,14 +165,18 @@ export const services = {
   ClaudeCodeProcessManager,
   AgentSessionRuntimeService,
   AgentSessionDeliveryService,
+  CheckpointService,
   AgentJobsService,
   AgentLifecycleService,
   ChannelManager,
   AiService,
+  ModelRoutingService,
+  ProviderKeyScanService,
   ClaudeCodeWarmQueryManager,
   ClaudeCodeSessionStateService,
   AiStreamManager,
   EmbeddingInferenceService,
+  ErrorSummarizerService,
   OcrInferenceService,
   LocalModelService,
   KnowledgeService,

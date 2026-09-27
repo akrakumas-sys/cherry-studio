@@ -295,8 +295,8 @@
       "metadata": {
         "website": {
           "apiKey": "https://platform.deepseek.com/api_keys",
-          "docs": "https://platform.deepseek.com/api-docs/",
-          "models": "https://platform.deepseek.com/api-docs/",
+          "docs": "https://api-docs.deepseek.com/",
+          "models": "https://api-docs.deepseek.com/",
           "official": "https://deepseek.com/"
         }
       },
@@ -508,7 +508,8 @@
           "official": "https://ppio.com/"
         }
       },
-      "name": "PPIO"
+      "name": "PPIO",
+      "supplementModelsFromRegistry": true
     },
     {
       "availableInEditions": ["global", "cn"],
@@ -820,6 +821,29 @@
       "name": "LM Studio"
     },
     {
+      "availableInEditions": ["global", "cn"],
+      "defaultChatEndpoint": "openai-chat-completions",
+      "description": "OmniRoute - AI model provider",
+      "endpointConfigs": {
+        "openai-chat-completions": {
+          "adapterFamily": "openai-compatible",
+          "baseUrl": "http://localhost:20128/v1",
+          "modelsApiUrls": {
+            "default": "http://localhost:20128/v1/models"
+          }
+        }
+      },
+      "id": "omniroute",
+      "metadata": {
+        "website": {
+          "docs": "https://github.com/diegosouzapw/OmniRoute",
+          "models": "https://github.com/diegosouzapw/OmniRoute#-providers",
+          "official": "https://github.com/diegosouzapw/OmniRoute"
+        }
+      },
+      "name": "OmniRoute"
+    },
+    {
       "availableInEditions": ["global"],
       "defaultChatEndpoint": "anthropic-messages",
       "description": "Anthropic - AI model provider",
@@ -1006,6 +1030,37 @@
       },
       "modelListSource": "registry",
       "name": "Grok CLI"
+    },
+    {
+      "authOptional": true,
+      "availableInEditions": ["global", "cn"],
+      "defaultChatEndpoint": "openai-responses",
+      "description": "oMLX - AI model provider",
+      "endpointConfigs": {
+        "anthropic-messages": {
+          "adapterFamily": "anthropic",
+          "baseUrl": "http://localhost:8000"
+        },
+        "openai-chat-completions": {
+          "adapterFamily": "openai-compatible",
+          "baseUrl": "http://localhost:8000",
+          "reasoningFormat": {
+            "type": "openai-chat"
+          }
+        },
+        "openai-responses": {
+          "adapterFamily": "open-responses",
+          "baseUrl": "http://localhost:8000"
+        }
+      },
+      "id": "omlx",
+      "metadata": {
+        "website": {
+          "docs": "https://github.com/jundot/omlx",
+          "official": "https://omlx.ai"
+        }
+      },
+      "name": "oMLX"
     },
     {
       "availableInEditions": ["global"],
@@ -1414,7 +1469,8 @@
           "modelScope": "model-dependent",
           "vendors": ["gemini"]
         }
-      ]
+      ],
+      "supplementModelsFromRegistry": true
     },
     {
       "availableInEditions": ["global"],
@@ -1498,6 +1554,79 @@
       "name": "Moonshot AI",
       "serverTools": [
         {
+          "endpointTypes": ["openai-chat-completions"],
+          "id": "web-search",
+          "modelScope": "model-dependent",
+          "vendors": ["kimi"]
+        }
+      ]
+    },
+    {
+      "availableInEditions": ["global"],
+      "defaultChatEndpoint": "openai-chat-completions",
+      "description": "Moonshot - AI model provider",
+      "endpointConfigs": {
+        "anthropic-messages": {
+          "adapterFamily": "anthropic",
+          "baseUrl": "https://api.moonshot.ai/anthropic"
+        },
+        "openai-chat-completions": {
+          "adapterFamily": "openai-compatible",
+          "baseUrl": "https://api.moonshot.ai",
+          "reasoningFormat": {
+            "type": "openai-chat",
+            "wire": {
+              "auto": {
+                "operations": [
+                  {
+                    "target": "thinking.type",
+                    "value": {
+                      "source": "literal",
+                      "value": "auto"
+                    }
+                  }
+                ]
+              },
+              "effort": {
+                "operations": [
+                  {
+                    "target": "thinking.type",
+                    "value": {
+                      "source": "literal",
+                      "value": "enabled"
+                    }
+                  }
+                ]
+              },
+              "off": {
+                "operations": [
+                  {
+                    "target": "thinking.type",
+                    "value": {
+                      "source": "literal",
+                      "value": "disabled"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "id": "moonshot-global",
+      "metadata": {
+        "website": {
+          "apiKey": "https://platform.moonshot.ai/console/api-keys",
+          "docs": "https://platform.moonshot.ai/docs/",
+          "models": "https://platform.moonshot.ai/docs/",
+          "official": "https://www.moonshot.ai/"
+        }
+      },
+      "name": "Moonshot",
+      "presetProviderId": "moonshot",
+      "serverTools": [
+        {
+          "endpointTypes": ["openai-chat-completions"],
           "id": "web-search",
           "modelScope": "model-dependent",
           "vendors": ["kimi"]
@@ -1857,7 +1986,8 @@
           "official": "https://fireworks.ai/"
         }
       },
-      "name": "Fireworks"
+      "name": "Fireworks",
+      "supplementModelsFromRegistry": true
     },
     {
       "availableInEditions": ["global"],
@@ -2529,5 +2659,5 @@
       "presetProviderId": "minimax"
     }
   ],
-  "version": "e47c80cffa19d83b"
+  "version": "2707d81b155c6c98"
 }

@@ -38,6 +38,7 @@ import type { ServiceTierSelection, UniqueModelId } from '@shared/data/types/mod
 import { isBlankUserTurn } from '@shared/data/types/uiParts'
 import type { ReasoningEffortOption } from '@shared/types/aiSdk'
 
+import { useAutoContinueTruncated } from './hooks/useAutoContinueTruncated'
 import { useChatWriteActions } from './hooks/useChatWriteActions'
 import { useTopicMessagesCache, type UseTopicMessagesCacheParams } from './hooks/useTopicMessagesCache'
 
@@ -237,8 +238,13 @@ export function useChatRuntimeState({
   // comes from refreshed DB state, then Main starts the continuation after
   // every approval settles.
   const respondToolApproval = useToolApprovalBridge(topic.id)
+  const persistedPartsByMessageId = useMemo(
+    () => Object.fromEntries(uiMessages.map((message) => [message.id, message.parts])),
+    [uiMessages]
+  )
   const toolApprovalComposerOverrides = useToolApprovalComposerOverrides({
     partsByMessageId,
+    persistedPartsByMessageId,
     streamingLayers,
     onRespond: respondToolApproval
   })
@@ -453,6 +459,13 @@ export function useChatRuntimeState({
       turnPhase === 'persisting' ||
       turnPhase === 'opening',
     assistant
+  })
+
+  useAutoContinueTruncated({
+    topicId: topic.id,
+    messages,
+    isStreamPending: isTopicStreamPending,
+    continueTruncated: chatWriteActions.continueTruncated
   })
 
   const sendMessage = useCallback(

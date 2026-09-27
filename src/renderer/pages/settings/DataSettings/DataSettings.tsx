@@ -34,10 +34,10 @@ const NutstoreSettings = lazy(() => import('./NutstoreSettings'))
 const ObsidianSettings = lazy(() => import('./ObsidianSettings'))
 const S3Settings = lazy(() => import('./S3Settings'))
 const SiyuanSettings = lazy(() => import('./SiyuanSettings'))
-const TrashSettings = lazy(() => import('./TrashSettings/TrashSettings'))
 const WebDavSettings = lazy(() => import('./WebDavSettings'))
 const YuqueSettings = lazy(() => import('./YuqueSettings'))
 const ImportMenuOptions = lazy(() => import('./ImportMenuSettings'))
+const TopicTrashSettings = lazy(() => import('./TopicTrashSettings'))
 
 type DataMenuItem =
   | { key: DataPanelKey; title: string; icon: ReactNode; isDivider?: undefined }
@@ -57,7 +57,6 @@ const DataSettings: FC = () => {
 
   const menuItems: DataMenuItem[] = [
     { key: 'data', title: t('settings.data.data.title'), icon: <FolderCog size={16} /> },
-    { key: 'trash', title: t('settings.data.trash.title'), icon: <Trash2 size={16} /> },
     { key: 'divider_1', isDivider: true, text: t('settings.data.divider.cloud_storage') },
     { key: 'local_backup', title: t('settings.data.local.title'), icon: <FolderCog size={16} /> },
     { key: 'webdav', title: t('settings.data.webdav.title'), icon: <CloudUpload size={16} /> },
@@ -85,7 +84,13 @@ const DataSettings: FC = () => {
     { key: 'yuque', title: t('settings.data.yuque.title'), icon: <BookOpen size={16} /> },
     { key: 'joplin', title: t('settings.data.joplin.title'), icon: <JoplinIcon /> },
     { key: 'obsidian', title: t('settings.data.obsidian.title'), icon: <i className="iconfont icon-obsidian" /> },
-    { key: 'siyuan', title: t('settings.data.siyuan.title'), icon: <SiyuanIcon /> }
+    { key: 'siyuan', title: t('settings.data.siyuan.title'), icon: <SiyuanIcon /> },
+    { key: 'divider_topic_trash', isDivider: true, text: t('settings.data.divider.topic_trash') },
+    {
+      key: 'topic_trash',
+      title: t('settings.data.topic_trash.title'),
+      icon: <Trash2 size={16} />
+    }
   ]
 
   return (
@@ -121,7 +126,6 @@ const DataSettings: FC = () => {
           <BasicDataSettings />
         ) : (
           <Suspense fallback={null}>
-            {menu === 'trash' && <TrashSettings />}
             {menu === 'webdav' && <WebDavSettings />}
             {menu === 'nutstore' && <NutstoreSettings />}
             {menu === 's3' && <S3Settings />}
@@ -134,6 +138,7 @@ const DataSettings: FC = () => {
             {menu === 'joplin' && <JoplinSettings />}
             {menu === 'obsidian' && <ObsidianSettings />}
             {menu === 'siyuan' && <SiyuanSettings />}
+            {menu === 'topic_trash' && <TopicTrashSettings />}
           </Suspense>
         )}
       </SettingsContentColumn>

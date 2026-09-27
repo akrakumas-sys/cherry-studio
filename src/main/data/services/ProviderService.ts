@@ -17,6 +17,7 @@ import { type StoredEndpointConfigOverride, userProviderTable } from '@data/db/s
 import { type SqliteErrorHandlers, withSqliteErrors } from '@data/db/sqliteErrors'
 import type { DbType } from '@data/db/types'
 import { isMigratedFromV1 } from '@data/migration/v1MigrationOrigin'
+import { filterKeysWithinQuota } from '@data/services/apiKeyQuota'
 import { getDataService, registerDataService } from '@data/services/dataServiceRegistry'
 import { pinService } from '@data/services/PinService'
 import type { ProviderDisplayMetadata, ReasoningProviderContext } from '@data/services/ProviderRegistryService'
@@ -33,9 +34,10 @@ import { DataApiError, DataApiErrorFactory, ErrorCode } from '@shared/data/api/e
 import type { OrderBatchRequest, OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type { CreateProviderDto, ListProvidersQuery, UpdateProviderDto } from '@shared/data/api/schemas/providers'
 import { isManagedCherryProviderId } from '@shared/data/presets/cherryai'
-import type { EndpointType } from '@shared/data/types/model'
+import type { EndpointType, UniqueModelId } from '@shared/data/types/model'
 import type {
   ApiKeyEntry,
+  ApiKeyTier,
   AuthConfig,
   AuthType,
   EndpointConfigOverride,
@@ -188,7 +190,11 @@ function normalizeApiKeyEntry(entry: ApiKeyEntry): ApiKeyEntry {
     id: entry.id,
     key,
     ...(entry.label ? { label: entry.label } : {}),
-    isEnabled: entry.isEnabled
+    isEnabled: entry.isEnabled,
+    ...(entry.tier ? { tier: entry.tier } : {}),
+    ...(entry.renewalAnchor ? { renewalAnchor: entry.renewalAnchor } : {}),
+    ...(entry.renewalTimezone ? { renewalTimezone: entry.renewalTimezone } : {}),
+    ...(entry.note ? { note: entry.note } : {})
   }
 }
 
@@ -334,6 +340,7 @@ function rowToRuntimeProvider(row: UserProviderRow, metadata?: ProviderDisplayMe
       undefined,
     defaultChatEndpoint: row.defaultChatEndpoint ?? presetMetadata.defaultChatEndpoint,
     modelListSource: presetMetadata.modelListSource,
+    supplementModelsFromRegistry: presetMetadata.supplementModelsFromRegistry,
     authMethods: presetMetadata.authMethods,
     authOptional: presetMetadata.authOptional,
     serverTools: presetMetadata.serverTools ?? [],
@@ -532,7 +539,8 @@ class ProviderService {
             isEnabled: false
           }
           return insertWithOrderKey(tx, userProviderTable, values, {
-            pkColumn: userProviderTable.providerId
+            pkColumn: userProviderTable.providerId,
+            position: 'first'
           }) as UserProviderRow
         }),
       {
@@ -546,9 +554,8 @@ class ProviderService {
   }
 
   /**
-   * Update an existing provider. A false-to-true enabled transition moves the
-   * provider to the first position in the same transaction; redundant enabled
-   * writes preserve the user's current order.
+   * Update an existing provider. Enabling or disabling does not change
+   * `orderKey`; callers that want a new position must use `move` / `reorder`.
    */
   update(providerId: string, dto: UpdateProviderInput): Provider {
     assertManagedCherryProviderPatchAllowed(providerId, dto)
@@ -568,7 +575,6 @@ class ProviderService {
           providerId: userProviderTable.providerId,
           providerSettings: userProviderTable.providerSettings,
           endpointConfigs: userProviderTable.endpointConfigs,
-          isEnabled: userProviderTable.isEnabled,
           presetProviderId: userProviderTable.presetProviderId
         })
         .from(userProviderTable)
@@ -615,15 +621,6 @@ class ProviderService {
         ) as Partial<ProviderSettings>
       }
 
-      if (dto.isEnabled === true && !current.isEnabled) {
-        try {
-          applyMoves(tx, userProviderTable, [{ id: providerId, anchor: { position: 'first' } }], {
-            pkColumn: userProviderTable.providerId
-          })
-        } catch (error) {
-          this.rethrowOrderError(error)
-        }
-      }
       if (dto.isEnabled !== undefined) updates.isEnabled = dto.isEnabled
 
       const [updated] = tx
@@ -677,7 +674,7 @@ class ProviderService {
    * actually serves the request. An explicit override is never rotated, but is
    * matched back to a stored key when possible.
    */
-  resolveApiKey(providerId: string, override?: string): ResolvedProviderApiKey {
+  resolveApiKey(providerId: string, override?: string, modelId?: UniqueModelId): ResolvedProviderApiKey {
     const db = application.get('DbService').getDb()
     const [row] = db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1).all()
 
@@ -689,13 +686,26 @@ class ProviderService {
       return matched ? toResolvedProviderApiKey(override, 'matched', matched) : unknownCredential(override)
     }
 
-    const enabledKeys = allKeys.filter((k) => k.isEnabled)
+    // Without the model, a model-scoped ceiling would be honoured on the fallback path and ignored
+    // here — the same key would look spent to one and available to the other.
+    const enabledKeys = filterKeysWithinQuota(
+      providerId,
+      allKeys.filter((k) => k.isEnabled),
+      modelId
+    )
 
     if (enabledKeys.length === 0) {
       return unknownCredential('')
     }
 
     if (enabledKeys.length === 1) {
+      return toResolvedProviderApiKey(enabledKeys[0].key, 'explicit', enabledKeys[0])
+    }
+
+    // Sequential: keep spending the first key that still has room. `filterKeysWithinQuota` has
+    // already dropped the spent ones, so "the first" is the first with anything left — the later
+    // keys stay whole instead of all of them ending the day half-used.
+    if (application.get('PreferenceService').get('chat.routing.key_rotation')[providerId] === 'sequential') {
       return toResolvedProviderApiKey(enabledKeys[0].key, 'explicit', enabledKeys[0])
     }
 
@@ -857,6 +867,10 @@ class ProviderService {
       key?: string
       label?: string
       isEnabled?: boolean
+      tier?: ApiKeyTier
+      renewalAnchor?: string
+      renewalTimezone?: string
+      note?: string
     }
   ): Provider {
     assertManagedCherryProviderMutationAllowed(providerId, `update API key for provider ${providerId}`)
@@ -896,7 +910,18 @@ class ProviderService {
         const updatedEntry = {
           ...entry,
           ...(updates.isEnabled !== undefined ? { isEnabled: updates.isEnabled } : {}),
-          ...(nextKeyValue ? { key: nextKeyValue } : {})
+          ...(nextKeyValue ? { key: nextKeyValue } : {}),
+          ...(updates.tier !== undefined ? { tier: updates.tier } : {}),
+          ...(updates.renewalTimezone !== undefined ? { renewalTimezone: updates.renewalTimezone } : {})
+        }
+
+        // An empty anchor means "no fixed renewal day", so it clears rather than storing "".
+        if (updates.renewalAnchor !== undefined) {
+          if (updates.renewalAnchor) {
+            updatedEntry.renewalAnchor = updates.renewalAnchor
+          } else {
+            delete updatedEntry.renewalAnchor
+          }
         }
 
         if (updates.label !== undefined) {
@@ -904,6 +929,14 @@ class ProviderService {
             updatedEntry.label = updates.label
           } else {
             delete updatedEntry.label
+          }
+        }
+
+        if (updates.note !== undefined) {
+          if (updates.note) {
+            updatedEntry.note = updates.note
+          } else {
+            delete updatedEntry.note
           }
         }
 

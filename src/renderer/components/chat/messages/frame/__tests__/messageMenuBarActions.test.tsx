@@ -190,6 +190,32 @@ function createActionContext(overrides: Partial<MessageMenuBarActionContext> = {
 }
 
 describe('messageMenuBarActions', () => {
+  it('uses the injected fork label and availability without owning session policy', async () => {
+    const forkSession = vi.fn()
+    const availability = vi.fn(() => ({ visible: true, enabled: true, reason: undefined as string | undefined }))
+    const context = createActionContext({
+      actions: { forkSession: { label: 'Fork this conversation', availability, run: forkSession } },
+      isProcessing: true,
+      isLastMessage: false
+    })
+    const forkAction = () => resolveMessageMenuBarMenuActions(context).find((action) => action.id === 'fork-session')!
+    expect(forkAction().availability.enabled).toBe(true)
+    expect(forkAction().label).toBe('Fork this conversation')
+    await executeMessageMenuBarAction('fork-session', context)
+    expect(forkSession).toHaveBeenCalledWith(context.message.id)
+    forkSession.mockClear()
+    availability.mockReturnValue({ visible: true, enabled: false, reason: 'Wait for the turn to finish' })
+    expect(forkAction().availability.enabled).toBe(false)
+    expect(forkAction().availability.reason).toBe('Wait for the turn to finish')
+    await executeMessageMenuBarAction('fork-session', context)
+    expect(forkSession).not.toHaveBeenCalled()
+    availability.mockReturnValue({ visible: true, enabled: true, reason: undefined })
+    expect(forkAction().availability.enabled).toBe(true)
+    await executeMessageMenuBarAction('fork-session', context)
+    expect(forkSession).toHaveBeenCalledWith(context.message.id)
+    expect(resolveMessageMenuBarMenuActions(context).some((action) => action.id === 'new-branch')).toBe(false)
+  })
+
   it('keeps write actions hidden when capabilities are absent', () => {
     const toolbarActions = resolveMessageMenuBarToolbarActions(
       createActionContext({
@@ -244,26 +270,27 @@ describe('messageMenuBarActions', () => {
     )
   })
 
-  it('keeps user edit toolbar action for root messages', () => {
-    const toolbarActions = resolveMessageMenuBarToolbarActions(
-      createActionContext({
-        message: {
-          id: 'message-1',
-          role: 'user',
-          topicId: 'topic-1',
-          parentId: null,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          status: 'success'
-        },
-        actions: {
-          editMessage: vi.fn()
-        },
-        isAssistantMessage: false,
-        isUserMessage: true
-      })
+  it.each(['inline', 'resend', 'blocked'])('respects the root user message edit capability: %s', (mode) => {
+    const context = createActionContext({
+      message: {
+        id: 'message-1',
+        role: 'user',
+        topicId: 'topic-1',
+        parentId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        status: 'success'
+      },
+      actions: {
+        editMessage: mode === 'resend' ? undefined : vi.fn(),
+        canEditMessage: mode === 'inline' ? undefined : () => mode === 'resend'
+      },
+      isAssistantMessage: false,
+      isUserMessage: true
+    })
+    expect(resolveMessageMenuBarToolbarActions(context).map((action) => action.id)).toEqual(
+      mode === 'blocked' ? ['copy'] : ['copy', 'user-edit']
     )
-
-    expect(toolbarActions.map((action) => action.id)).toEqual(['copy', 'user-edit'])
+    expect(resolveMessageMenuBarMenuActions(context).some((action) => action.id === 'edit')).toBe(mode !== 'blocked')
   })
 
   it('keeps user edit toolbar action for non-root messages', () => {
@@ -366,6 +393,74 @@ describe('messageMenuBarActions', () => {
     expect(typeof toolbarActions.find((action) => action.id === 'translate')?.renderToolbar).toBe('function')
     expect(typeof toolbarActions.find((action) => action.id === 'delete')?.renderToolbar).toBe('function')
     expect(typeof toolbarActions.find((action) => action.id === 'more-menu')?.renderToolbar).toBe('function')
+  })
+
+  it('offers to continue a reply only when the provider cut it off', () => {
+    const actions = { continueTruncatedMessage: vi.fn() } as unknown as MessageListActions
+
+    const onComplete = resolveMessageMenuBarToolbarActions(createActionContext({ actions }))
+    expect(onComplete.map((action) => action.id)).not.toContain('assistant-continue')
+
+    const onTruncated = resolveMessageMenuBarToolbarActions(
+      createActionContext({
+        actions,
+        message: {
+          id: 'message-1',
+          role: 'assistant',
+          topicId: 'topic-1',
+          parentId: 'parent-1',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'success',
+          stats: { finishReason: 'length' }
+        }
+      })
+    )
+    expect(onTruncated.map((action) => action.id)).toContain('assistant-continue')
+  })
+
+  it('continues the message the action was raised on', async () => {
+    const continueTruncatedMessage = vi.fn()
+    const context = createActionContext({
+      actions: { continueTruncatedMessage } as unknown as MessageListActions,
+      message: {
+        id: 'message-7',
+        role: 'assistant',
+        topicId: 'topic-1',
+        parentId: 'parent-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        status: 'success',
+        stats: { finishReason: 'length' }
+      }
+    })
+
+    await executeMessageMenuBarAction('assistant-continue', context)
+
+    expect(continueTruncatedMessage).toHaveBeenCalledWith('message-7')
+  })
+
+  it('hides the context-exclusion toggle when the capability is absent', () => {
+    const toolbarActions = resolveMessageMenuBarToolbarActions(createActionContext({ actions: {} }))
+    expect(toolbarActions.map((action) => action.id)).not.toContain('exclude-context')
+  })
+
+  it('excludes an included message and includes an excluded one', async () => {
+    const setMessageContextExclusion = vi.fn()
+    const actions = { setMessageContextExclusion } as unknown as MessageListActions
+
+    await executeMessageMenuBarAction(
+      'exclude-context',
+      createActionContext({ actions, message: { ...createActionContext().message, id: 'message-included' } })
+    )
+    expect(setMessageContextExclusion).toHaveBeenCalledWith('message-included', true)
+
+    await executeMessageMenuBarAction(
+      'exclude-context',
+      createActionContext({
+        actions,
+        message: { ...createActionContext().message, id: 'message-excluded', isExcludedFromContext: true }
+      })
+    )
+    expect(setMessageContextExclusion).toHaveBeenCalledWith('message-excluded', false)
   })
 
   it('does not require confirmation before regenerating an assistant message', () => {

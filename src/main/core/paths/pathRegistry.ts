@@ -45,6 +45,7 @@ function getUserSystemPath(name: UserSystemPathName, fallback: string): string {
 export function buildPathRegistry() {
   // Intermediate vars (primitives only — no object literals in this file).
   const sysHome = os.homedir()
+  const sysDocuments = getUserSystemPath('documents', path.join(sysHome, 'Documents'))
   const appUserData = app.getPath('userData')
   const appUserDataData = path.join(appUserData, 'Data')
   const appUserDataRuntime = path.join(appUserData, 'Runtime')
@@ -60,7 +61,7 @@ export function buildPathRegistry() {
   const appRootResources = path.join(app.getAppPath(), 'resources')
 
   return Object.freeze({
-    // -- A. cherry.* — ~/.cherrystudio infrastructure --
+    // -- A. cherry.* — CHERRY_HOME infrastructure --
     'cherry.home': CHERRY_HOME,
     'cherry.bin': path.join(CHERRY_HOME, 'bin'),
     'cherry.config': path.join(CHERRY_HOME, 'config'),
@@ -69,7 +70,7 @@ export function buildPathRegistry() {
     'sys.home': sysHome,
     'sys.temp': sysTemp, // OS-wide; prefer app.temp for Cherry-specific temp
     'sys.downloads': getUserSystemPath('downloads', path.join(sysHome, 'Downloads')),
-    'sys.documents': getUserSystemPath('documents', path.join(sysHome, 'Documents')),
+    'sys.documents': sysDocuments,
     'sys.desktop': getUserSystemPath('desktop', path.join(sysHome, 'Desktop')),
     'sys.appdata': app.getPath('appData'), // OS root; use app.userdata for Cherry-owned
     'sys.appdata.autostart': path.join(app.getPath('appData'), 'autostart'), // Linux only
@@ -99,6 +100,8 @@ export function buildPathRegistry() {
       : path.join(__dirname, '../../migrations/sqlite-drizzle'),
 
     // -- D. feature.* — grouped by feature, physical location is irrelevant --
+
+    'feature.remote_access.identity_file': path.join(appUserDataRuntime, 'remote-identity.enc'),
 
     // Provider registry data (models.json, providers.json, etc.)
     'feature.provider_registry.data': app.isPackaged
@@ -159,8 +162,10 @@ export function buildPathRegistry() {
     'feature.mcp.workspace': path.join(appUserDataData, 'Workspace'),
     // MCP memory server's knowledge-graph JSON for the built-in MCP server
     'feature.mcp.memory_file': path.join(CHERRY_HOME, 'config', 'memory.json'),
-    // Server catalog `@cherry/mcp-auto-install` reads when a custom registry is configured
+    // `@cherry/mcp-auto-install` owns both: its Registry API cache, and the config file it
+    // writes to instead of probing the user's other MCP clients
     'feature.mcp.registry_file': path.join(CHERRY_HOME, 'config', 'mcp-registry.json'),
+    'feature.mcp.auto_install_settings_file': path.join(CHERRY_HOME, 'config', 'mcp-auto-install-settings.json'),
 
     // Copilot token
     'feature.copilot.token_file': path.join(CHERRY_HOME, 'config', '.copilot_token'),
@@ -197,6 +202,8 @@ export function buildPathRegistry() {
     'feature.agents.dsh.root': path.join(appUserDataData, 'Agents', '.dsh'), // Cherry-owned dsh home (DSH_HOME) + per-connection compositions
     'feature.agents.dsh.sessions': path.join(appUserDataData, 'Agents', '.dsh', 'sessions'), // JSONL session-persistence root
     'feature.agents.data': path.join(appUserDataData, 'Agents'), // per-agent identity + memory data
+    'feature.agents.forks': path.join(appUserDataData, 'Agents', '.forks'), // owned fork snapshots; retained for Pi lineage
+    'feature.agents.checkpoints': path.join(appUserDataData, 'Agents', '.checkpoints'), // pre-turn workspace snapshots for non-git sessions (O1)
     'feature.agents.system_workspaces': path.join(appUserDataData, 'Agents', 'system'), // app-owned session workspaces
     'feature.agents.builtin': path.join(appRootResources, 'builtin-agents'), // bundled agent templates (read-only)
     'feature.agents.assistant.manifest.file': path.join(
@@ -245,6 +252,11 @@ export function buildPathRegistry() {
     'feature.backup.restore.file': path.join(appUserDataData, 'restore-journal.json'),
     'feature.backup.restore.staging': path.join(appUserData, 'restore-staging'),
 
+    // Where automatic local backups land when the user has not chosen a folder. Deliberately OUTSIDE
+    // userData: AutoBackupService refuses a directory inside it, and a backup kept there would be
+    // swallowed by the next backup and lost with the profile it was meant to survive.
+    'feature.backup.auto_local': path.join(sysDocuments, 'CherryStudio Backups'),
+
     // Stored in the profile it authorizes for reset.
     'feature.data_reset.marker_file': path.join(appUserData, 'data-reset.pending.json'),
 
@@ -272,6 +284,7 @@ export function buildPathRegistry() {
     'v1.agents.claude': path.join(appUserData, '.claude'),
 
     // -- F. external.* — third-party tool paths (Cherry reads/writes, does NOT own) --
+    'external.claude.config': path.join(sysHome, '.claude'),
     'external.browser.chrome': isMac
       ? path.join(sysHome, 'Library/Application Support/Google/Chrome')
       : isWin
@@ -316,6 +329,7 @@ export function buildPathRegistry() {
         : path.join(sysHome, '.mozilla/firefox'),
     'external.openclaw.config': path.join(sysHome, '.openclaw'),
     'external.deepseek_harness.config': path.join(sysHome, '.dsh'),
+    'external.pi.settings_file': path.join(sysHome, '.pi', 'agent', 'settings.json'),
     'external.hermes.default_home': isWin
       ? path.join(process.env.LOCALAPPDATA?.trim() || path.join(sysHome, 'AppData', 'Local'), 'hermes')
       : path.join(sysHome, '.hermes'),

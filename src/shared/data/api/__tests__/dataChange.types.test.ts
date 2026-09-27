@@ -27,9 +27,11 @@ describe('endpoint classification', () => {
       | '/agents'
       | '/agents/:agentId/tasks'
       | '/agents/:agentId/tasks/:taskId/logs'
+      | '/archives'
       | '/assistants'
       | '/browser-visits'
       | '/api-gateway/paired-devices'
+      | '/diagnostic-reports'
       | '/files/entries'
       | '/files/entries/by-content-hash'
       | '/files/entries/:id/refs'
@@ -61,6 +63,7 @@ describe('endpoint classification', () => {
       | '/translate/histories'
       | '/translate/languages'
       | '/ai-usage-records'
+      | '/videos'
     >()
   })
 

@@ -5,6 +5,9 @@ import {
   Check,
   CirclePause,
   CopyPlus,
+  CornerDownRight,
+  Eye,
+  EyeOff,
   FilePenLine,
   Languages,
   ListChecks,
@@ -127,6 +130,15 @@ function toolbarAvailability(
   }
 }
 
+function canStartEditing({
+  actions,
+  message,
+  isTranslating,
+  startEditingMessage
+}: MessageMenuBarActionContext): boolean {
+  return !isTranslating && !!startEditingMessage && (actions.canEditMessage?.(message) ?? !!actions.editMessage)
+}
+
 function notifyCommandError(id: string, context: MessageMenuBarActionContext, error: unknown) {
   logger.error(`Message menu action failed: ${id}`, error as Error)
   context.actions.notifyError?.(formatErrorMessageWithPrefix(error, context.t('message.error.unknown')))
@@ -209,6 +221,14 @@ registerCommand('message.regenerate', async ({ actions, message }) => {
   await actions.regenerateMessage?.(message.id)
 })
 
+registerCommand('message.continueTruncated', async ({ actions, message }) => {
+  await actions.continueTruncatedMessage?.(message.id)
+})
+
+registerCommand('message.toggleContextExclusion', async ({ actions, message }) => {
+  await actions.setMessageContextExclusion?.(message.id, !message.isExcludedFromContext)
+})
+
 registerCommand('message.delete', async ({ actions, message }) => {
   await actions.abortMessageTranslation?.(message.id)
   await actions.deleteMessage?.(message.id, {
@@ -223,6 +243,9 @@ registerCommand('message.abortTranslation', async ({ actions, message }) => {
 registerCommand('message.newBranch', async ({ actions, message, t }) => {
   await actions.startMessageBranch?.(message.id)
   actions.notifySuccess?.(t('chat.message.new.branch.created'))
+})
+registerCommand('message.forkSession', async ({ actions, message }) => {
+  await actions.forkSession?.run(message.id)
 })
 
 registerCommand('message.copyToNewTopic', async ({ actions, message, t }) => {
@@ -327,13 +350,9 @@ registerCommand('message.useful', ({ message, onSelectContext }) => {
 registerToolbarAction({
   id: 'user-edit',
   commandId: 'message.edit',
-  label: ({ t }) => t('common.edit'),
+  label: ({ t, actions }) => actions.editLabel ?? t('common.edit'),
   icon: <EditIcon size={15} />,
-  availability: toolbarAvailability(
-    'user-edit',
-    ({ actions, isTranslating, isUserMessage, startEditingMessage }) =>
-      !isTranslating && isUserMessage && !!actions.editMessage && !!startEditingMessage
-  )
+  availability: toolbarAvailability('user-edit', (context) => context.isUserMessage && canStartEditing(context))
 })
 
 registerToolbarAction({
@@ -352,6 +371,20 @@ registerToolbarAction({
   availability: toolbarAvailability(
     'assistant-regenerate',
     ({ actions, isAssistantMessage }) => isAssistantMessage && !!actions.regenerateMessage
+  )
+})
+
+// Free tiers cap output low enough that long answers stop mid-sentence. Regenerate would
+// throw the written half away, so the cut-off case gets its own button — and only then.
+registerToolbarAction({
+  id: 'assistant-continue',
+  commandId: 'message.continueTruncated',
+  label: ({ t }) => t('message.continue_truncated.label'),
+  icon: <CornerDownRight size={15} />,
+  availability: toolbarAvailability(
+    'assistant-continue',
+    ({ actions, isAssistantMessage, message }) =>
+      isAssistantMessage && message.stats?.finishReason === 'length' && !!actions.continueTruncatedMessage
   )
 })
 
@@ -415,6 +448,15 @@ registerToolbarAction({
 })
 
 registerToolbarAction({
+  id: 'exclude-context',
+  commandId: 'message.toggleContextExclusion',
+  label: ({ t, message }) =>
+    t(message.isExcludedFromContext ? 'chat.message.exclude_context.include' : 'chat.message.exclude_context.exclude'),
+  icon: ({ message }) => (message.isExcludedFromContext ? <Eye size={15} /> : <EyeOff size={15} />),
+  availability: toolbarAvailability('exclude-context', ({ actions }) => !!actions.setMessageContextExclusion)
+})
+
+registerToolbarAction({
   id: 'delete',
   renderToolbar: renderDeleteToolbarAction,
   commandId: 'message.delete',
@@ -454,17 +496,13 @@ registerToolbarAction({
 registerAction({
   id: 'edit',
   commandId: 'message.edit',
-  label: ({ t }) => t('common.edit'),
+  label: ({ t, actions }) => actions.editLabel ?? t('common.edit'),
   icon: <FilePenLine size={15} />,
   group: 'write',
   order: 10,
   surface: 'menu',
-  availability: ({ actions, isAssistantMessage, isEditable, isTranslating, isUserMessage, startEditingMessage }) =>
-    !isTranslating &&
-    isEditable &&
-    !!actions.editMessage &&
-    !!startEditingMessage &&
-    (isUserMessage || isAssistantMessage)
+  availability: (context) =>
+    context.isEditable && (context.isUserMessage || context.isAssistantMessage) && canStartEditing(context)
 })
 
 registerAction({
@@ -479,6 +517,17 @@ registerAction({
     if (!actions.startMessageBranch || !isAssistantMessage) return false
     return true
   }
+})
+
+registerAction({
+  id: 'fork-session',
+  commandId: 'message.forkSession',
+  label: ({ actions }) => actions.forkSession?.label ?? '',
+  icon: <Split size={15} />,
+  group: 'write',
+  order: 22,
+  surface: 'menu',
+  availability: ({ actions, message }) => actions.forkSession?.availability(message) ?? false
 })
 
 registerAction({

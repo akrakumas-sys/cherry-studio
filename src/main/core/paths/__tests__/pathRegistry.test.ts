@@ -41,6 +41,17 @@ describe('buildPathRegistry', () => {
     )
   })
 
+  // AutoBackupService.validateLocalBackupDirectory refuses any directory inside userData or the
+  // install dir, and a backup kept there would be swallowed by the next backup anyway. A default
+  // that lands in either place fails on every scheduled run.
+  it('keeps the default backup directory outside userData and the install directory', () => {
+    const registry = buildPathRegistry()
+    const defaultBackup = registry['feature.backup.auto_local']
+
+    expect(defaultBackup.startsWith(registry['app.userdata'])).toBe(false)
+    expect(defaultBackup.startsWith(registry['app.install'])).toBe(false)
+  })
+
   it('keeps the Claude config under the Agents data directory', () => {
     const registry = buildPathRegistry()
     const claudeRoot = path.join('/mock/userData', 'Data', 'Agents', '.claude')
@@ -192,6 +203,13 @@ describe('buildPathRegistry', () => {
   it('uses the shared user-owned DeepSeek Harness home', () => {
     const registry = buildPathRegistry()
     expect(registry['external.deepseek_harness.config']).toBe(path.join(os.homedir(), '.dsh'))
+  })
+
+  it('registers standalone Pi settings as external data', () => {
+    expect(buildPathRegistry()['external.pi.settings_file']).toBe(
+      path.join(os.homedir(), '.pi', 'agent', 'settings.json')
+    )
+    expect(shouldAutoEnsure('external.pi.settings_file')).toBe(false)
   })
 
   it('registers the platform-native default Hermes home as external data', () => {

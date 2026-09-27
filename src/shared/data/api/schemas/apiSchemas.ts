@@ -26,8 +26,10 @@ import type { AgentSessionSchemas } from './agentSessions'
 import type { AgentWorkspaceSchemas } from './agentWorkspaces'
 import type { AiUsageRecordSchemas } from './aiUsageRecords'
 import type { ApiGatewayPairedDeviceSchemas } from './apiGatewayPairedDevices'
+import type { ArchiveSchemas } from './archives'
 import type { AssistantSchemas } from './assistants'
 import type { BrowserVisitSchemas } from './browserVisits'
+import type { DiagnosticReportSchemas } from './diagnosticReports'
 import type { FileSchemas } from './files'
 import type { GroupSchemas } from './groups'
 import type { JobSchemas } from './jobs'
@@ -47,6 +49,7 @@ import type { TagSchemas } from './tags'
 import type { TemporaryChatSchemas } from './temporaryChats'
 import type { TopicSchemas } from './topics'
 import type { TranslateSchemas } from './translate'
+import type { VideosSchemas } from './videos'
 
 /**
  * Merged API Schemas - single source of truth for all API endpoints
@@ -75,6 +78,7 @@ export type ApiSchemas = AssertValidSchemas<
     KnowledgeSchemas &
     MiniAppSchemas &
     NoteSchemas &
+    ArchiveSchemas &
     AssistantSchemas &
     TagSchemas &
     PromptSchemas &
@@ -88,5 +92,7 @@ export type ApiSchemas = AssertValidSchemas<
     AgentChannelSchemas &
     JobSchemas &
     SearchSchemas &
-    AiUsageRecordSchemas
+    AiUsageRecordSchemas &
+    VideosSchemas &
+    DiagnosticReportSchemas
 >

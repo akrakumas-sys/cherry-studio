@@ -39,16 +39,33 @@ const locales = Object.fromEntries(
 /** Every language main carries a catalog for — the source of truth other modules should key off of. */
 export const SUPPORTED_LANGUAGES = Object.keys(locales) as LanguageVarious[]
 
-export const getAppLanguage = (): LanguageVarious => {
-  const language = application.get('PreferenceService').get('app.language')
-  const appLocale = app.getLocale()
+/**
+ * Resolve a locale tag to the catalog it belongs to, case-insensitively — i18next
+ * normalizes `tr-tr` to `tr-TR` in the renderer, so a preference written that way
+ * must not leave main without a catalog. Unknown tags resolve to `undefined`.
+ */
+const toSupportedLanguage = (value: string | null | undefined): LanguageVarious | undefined =>
+  SUPPORTED_LANGUAGES.find((language) => language.toLowerCase() === value?.toLowerCase())
 
-  if (language) {
-    return language
+/** Falls back from an exact tag match to a bare language-prefix match (e.g. `en-CA` → `en-US`), with zh's script disambiguated via `Intl.Locale`. */
+export const resolveSystemLanguage = (locale: string): LanguageVarious => {
+  const exactMatch = toSupportedLanguage(locale)
+  if (exactMatch) return exactMatch
+
+  const language = locale.toLowerCase().split('-')[0]
+  if (language === 'zh') {
+    try {
+      return new Intl.Locale(locale).maximize().script === 'Hant' ? 'zh-TW' : 'zh-CN'
+    } catch {
+      return 'zh-CN'
+    }
   }
-
-  return (Object.keys(locales).includes(appLocale) ? appLocale : defaultLanguage) as LanguageVarious
+  return SUPPORTED_LANGUAGES.find((supported) => supported.toLowerCase().split('-')[0] === language) ?? defaultLanguage
 }
+
+export const getAppLanguage = (): LanguageVarious =>
+  toSupportedLanguage(application.get('PreferenceService').get('app.language')) ??
+  resolveSystemLanguage(app.getLocale())
 
 /**
  * Get translation by key (e.g., 'dialog.save_file')
